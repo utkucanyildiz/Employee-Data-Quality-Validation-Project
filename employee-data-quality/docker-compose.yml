@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  ge_service:
+    build:
+      context: ./ge_project
+      dockerfile: Dockerfile
+    container_name: ge_validator
+    volumes:
+      - ./dataset:/app/dataset:ro
+      - ./output/ge_results:/app/output
+      - ./ge_project:/app/ge_project
+    environment:
+      - PYTHONPATH=/app
+    command: python auto_validator.py
+    depends_on:
+      - setup_volumes
+
+  deequ_service:
+    build:
+      context: ./deequ_project
+      dockerfile: Dockerfile
+    container_name: deequ_validator
+    volumes:
+      - ./dataset:/app/dataset:ro
+      - ./output/deequ_results:/app/output
+      - ./deequ_project:/app/deequ_project
+    environment:
+      - SPARK_HOME=/opt/spark
+    command: /app/run_deequ_validation.sh
+    depends_on:
+      - setup_volumes
+
+  combined_pipeline:
+    build:
+      context: ./ge_project
+      dockerfile: Dockerfile
+    container_name: combined_validator
+    volumes:
+      - ./dataset:/app/dataset:ro
+      - ./output:/app/output
+      - ./ge_project:/app/ge_project
+    environment:
+      - PYTHONPATH=/app
+    command: python combined_pipeline.py
+    depends_on:
+      - deequ_service
+    profiles:
+      - combined
+
+  setup_volumes:
+    image: alpine:latest
+    container_name: volume_setup
+    volumes:
+      - ./output/ge_results:/ge_results
+      - ./output/deequ_results:/deequ_results
+    command: >
+      sh -c "
+        mkdir -p /ge_results /deequ_results &&
+        chmod 777 /ge_results /deequ_results
+      "
+
+networks:
+  default:
+    name: data_quality_network
